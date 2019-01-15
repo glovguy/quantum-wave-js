@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+</head>
+<body style="text-align:center; margin-left:auto; margin-right:auto;">
+
+<canvas id="draw" width="1265" height="492"></canvas>
+
+<script>
+  const canvas = document.querySelector('#draw');
+  const ctx = canvas.getContext('2d');
+
+  canvas.addEventListener('click', onCanvasClick, false);
+
+  function SQR(x) { return x*x; }
+
+  class Complex {
+    constructor(re,im) {
+      this.re = re;
+      this.im = im;
+    }
+  }
+
+  class Vector {
+    constructor(x,y) {
+      this.x = x;
+      this.y = y;
+    }
+  }
+
+  class QuantumWaveState {
+    constructor() {}
+  }
+
+  // Display vars //
+  let animReqId = null;
+  // const xScale = 3.0;
+  const yScale = (canvas.height * 30.0);
+  const iterateMax = 120;
+
+
+  // Physical constants //
+  const sigma = 50.0;
+  const energy = 31100.0;
+  const x0 = 200.0;
+
+  const dt_dx2 = 0.006;
+  const dx = 0.004;
+  const dt = dt_dx2 * SQR(dx);
+
+
+  // Global state vars //
+  const psiWave = [];
+
+  let tNow = 0;
+  let tNew = 1;
+  let tOld = 2;
+
+  function drawWave() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'lightgrey';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.beginPath();
+    ctx.lineWidth = "2";
+    ctx.strokeStyle = "green";
+    ctx.moveTo(0,canvas.height);
+    for (let x=1; x<psiWave.length; x++) {
+      const y = canvas.height - yScale*expectationValue(psiWave[x][tNow]);
+      // const y = canvas.height - 0.2*yScale* psiWave[x][tNow].re;
+      // const y = canvas.height - 0.2*yScale* psiWave[x][tNow].im;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(psiWave.length, canvas.height);
+    ctx.stroke();
+  }
+
+  function expectationValue(complexValue) {
+    return SQR(complexValue.re) + SQR(complexValue.im);
+  }
+
+  function initialWavePacketAtTimeAndX(time, x) {
+    const tS = 0.5*SQR(sigma);
+    const t_tS = time/tS;
+    const sigmaT = sigma*Math.sqrt(1 + SQR(t_tS));
+
+    const p0 = Math.sqrt(energy);
+    const d = 2*p0*time - x + x0;
+    const d_sigmaT = d/sigmaT;
+
+    const phase = SQR(p0)*time - p0*(x - x0) - 0.5*t_tS*SQR(d_sigmaT) + 0.5*Math.atan(t_tS);
+    const abs = Math.exp(-0.5*SQR(d_sigmaT))/Math.sqrt(Math.sqrt(Math.PI)*sigmaT);
+    const psiExact = new Complex(
+      abs*Math.cos(phase),
+      abs*Math.cos(phase + Math.PI/2.0)
+    );
+    return psiExact;
+  }
+
+  function initialWavePacketAtX(x) {
+    const psiOld = initialWavePacketAtTimeAndX(-dt, x);
+    const psiNow = initialWavePacketAtTimeAndX(0, x);
+    const psiNew = initialWavePacketAtTimeAndX(dt, x);
+
+    const wave = {};
+    wave[tNow] = psiNow;
+    wave[tNew] = psiNew;
+    wave[tOld] = psiOld;
+    return wave;
+  }
+
+  function eventLocationOnCanvas(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    return new Vector(x,y);
+  }
+
+  function onCanvasClick(event) {
+    // drawWave();
+    // for (let x=0; x<canvas.width; x++) {
+    //   psiWave[x] = initialWavePacketAtX(x);
+    // }
+
+    // psiWave[0] = {
+    //   tNow: new Complex(0,0),
+    //   tNew: new Complex(0,0),
+    //   tOld: new Complex(0,0)
+    // }
+  }
+
+  function evolve() {
+    for (let iter=0; iter<iterateMax; iter++) {
+      for (let x=1; x<canvas.width; x++) {
+        const laplace = new Complex(
+          2.0*dt_dx2 * (psiWave[x-1][tNow].re - 2.0*psiWave[x][tNow].re + psiWave[x+1][tNow].re),
+          2.0*dt_dx2 * (psiWave[x-1][tNow].im - 2.0*psiWave[x][tNow].im + psiWave[x+1][tNow].im)
+        );
+
+        psiWave[x][tNew].re = psiWave[x][tOld].re - laplace.im;
+        psiWave[x][tNew].im = psiWave[x][tOld].im + laplace.re;
+      }
+
+      const _tOld = tOld;
+      tOld = tNow;
+      tNow = tNew;
+      tNew = _tOld;
+    }
+    drawWave();
+    animReqId = requestAnimFrame(evolve);
+  }
+
+  for (let x=1; x<canvas.width; x++) {
+    psiWave[x] = initialWavePacketAtX(x);
+  }
+  psiWave[0] = {
+    0: new Complex(0,0),
+    1: new Complex(0,0),
+    2: new Complex(0,0)
+  }
+  psiWave[canvas.width] = {
+    0: new Complex(0,0),
+    1: new Complex(0,0),
+    2: new Complex(0,0)
+  }
+  drawWave();
+
+  window.requestAnimFrame = (function(){
+    return window.requestAnimationFrame  ||
+      window.webkitRequestAnimationFrame  ||
+      window.mozRequestAnimationFrame     ||
+      function( callback ){
+        window.setTimeout(callback, 100);
+      };
+  })();
+
+  requestAnimFrame(evolve);
+</script>
+
+</body>
+</html>
