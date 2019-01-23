@@ -11,7 +11,7 @@
   const canvas = document.querySelector('#draw');
   const ctx = canvas.getContext('2d');
 
-  canvas.addEventListener('click', onCanvasClick, false);
+  // canvas.addEventListener('click', onCanvasClick, false);
 
   function SQR(x) { return x*x; }
 
@@ -29,55 +29,93 @@
     }
   }
 
-  class QuantumWaveState {
-    constructor() {}
-  }
+  // Wave state vars //
+  const N_UNIVERSE = 1265;//4000.0;
+  const psi = [];
 
-  // Display vars //
-  let animReqId = null;
-  // const xScale = 3.0;
-  const yScale = (canvas.height * 30.0);
-  const iterateMax = 120;
+  let tOld = 0;
+  let tNow = 1;
+  let tNew = 2;
 
 
   // Physical constants //
-  const sigma = 50.0;
+  const sigma = 25;
   const energy = 31100.0;
-  const x0 = 200.0;
+  const x0 = 0.3 * canvas.width;//200.0;
 
   const dt_dx2 = 0.006;
   const dx = 0.004;
   const dt = dt_dx2 * SQR(dx);
 
 
-  // Global state vars //
-  const psiWave = [];
+  // Potential state vars //
+  const vLeft = 0;
+  const vCenter = 11000.0;
+  const vRight = 0;
 
-  let tNow = 0;
-  let tNew = 1;
-  let tOld = 2;
+  const xLeft = 0.45*N_UNIVERSE*dx;
+  const xRight = 0.55*N_UNIVERSE*dx;
 
-  function drawWave() {
+
+  // Display vars //
+  let animReqId = null;
+  const xScale = 3.0;
+  const psi2Scale = 14500.0;//(canvas.height * 30.0);
+  const nDtPerDisplay = 220;
+
+  const potentialScale = 0.0105;
+
+
+  function drawCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'lightgrey';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawWave();
+    drawPotentialEnergy();
+  }
 
+  function drawWave() {
     ctx.beginPath();
     ctx.lineWidth = "2";
     ctx.strokeStyle = "green";
     ctx.moveTo(0,canvas.height);
-    for (let x=1; x<psiWave.length; x++) {
-      const y = canvas.height - yScale*expectationValue(psiWave[x][tNow]);
-      // const y = canvas.height - 0.2*yScale* psiWave[x][tNow].re;
-      // const y = canvas.height - 0.2*yScale* psiWave[x][tNow].im;
+    for (let x=1; x<canvas.width; x++) {
+      const y = canvasLocationY(expectationValue(psi[x][tNow]), psi2Scale);
       ctx.lineTo(x, y);
     }
-    ctx.lineTo(psiWave.length, canvas.height);
+    ctx.lineTo(psi.length, canvas.height);
     ctx.stroke();
+  }
+
+  function drawPotentialEnergy() {
+    ctx.beginPath();
+    ctx.lineWidth = "1";
+    ctx.strokeStyle = "blue";
+    ctx.moveTo(0, canvasLocationY(energy,potentialScale));
+    ctx.lineTo(canvas.width, canvasLocationY(energy,potentialScale));
+    ctx.stroke();
+
+    ctx.moveTo(0, canvasLocationY(vLeft, potentialScale));
+    ctx.lineTo(xLeft/dx, canvasLocationY(vLeft, potentialScale));
+    ctx.lineTo(xLeft/dx, canvasLocationY(vCenter, potentialScale));
+    ctx.lineTo(xRight/dx, canvasLocationY(vCenter, potentialScale));
+    ctx.lineTo(xRight/dx, canvasLocationY(vRight, potentialScale));
+    ctx.lineTo(canvas.width, canvasLocationY(vRight, potentialScale));
+    ctx.stroke();
+  }
+
+  function canvasLocationY(value, scale) {
+    return canvas.height - scale*value;
   }
 
   function expectationValue(complexValue) {
     return SQR(complexValue.re) + SQR(complexValue.im);
+  }
+
+  function potential(x) {
+    if (x < xLeft/dx && x > 0) { return vLeft; }
+    if (x >= xLeft/dx && x < xRight/dx) { return vCenter; }
+    if (x >= xRight/dx && x < canvas.width/dx) { return vRight; }
   }
 
   function initialWavePacketAtTimeAndX(time, x) {
@@ -89,6 +127,8 @@
     const d = 2*p0*time - x + x0;
     const d_sigmaT = d/sigmaT;
 
+    // const phase = p0*(x - x0) - energy*time;
+    // const abs = Math.exp(-0.5*SQR(x-x0))/SQR(sigma);
     const phase = SQR(p0)*time - p0*(x - x0) - 0.5*t_tS*SQR(d_sigmaT) + 0.5*Math.atan(t_tS);
     const abs = Math.exp(-0.5*SQR(d_sigmaT))/Math.sqrt(Math.sqrt(Math.PI)*sigmaT);
     const psiExact = new Complex(
@@ -117,29 +157,15 @@
     return new Vector(x,y);
   }
 
-  function onCanvasClick(event) {
-    // drawWave();
-    // for (let x=0; x<canvas.width; x++) {
-    //   psiWave[x] = initialWavePacketAtX(x);
-    // }
-
-    // psiWave[0] = {
-    //   tNow: new Complex(0,0),
-    //   tNew: new Complex(0,0),
-    //   tOld: new Complex(0,0)
-    // }
-  }
-
   function evolve() {
-    for (let iter=0; iter<iterateMax; iter++) {
-      for (let x=1; x<canvas.width; x++) {
+    for (let iter=0; iter<nDtPerDisplay; iter++) {
+      for (let x=1; x<N_UNIVERSE; x++) {
         const laplace = new Complex(
-          2.0*dt_dx2 * (psiWave[x-1][tNow].re - 2.0*psiWave[x][tNow].re + psiWave[x+1][tNow].re),
-          2.0*dt_dx2 * (psiWave[x-1][tNow].im - 2.0*psiWave[x][tNow].im + psiWave[x+1][tNow].im)
+          2.0*dt_dx2 * (psi[x-1][tNow].re - 2.0*psi[x][tNow].re + psi[x+1][tNow].re),
+          2.0*dt_dx2 * (psi[x-1][tNow].im - 2.0*psi[x][tNow].im + psi[x+1][tNow].im)
         );
-
-        psiWave[x][tNew].re = psiWave[x][tOld].re - laplace.im;
-        psiWave[x][tNew].im = psiWave[x][tOld].im + laplace.re;
+        psi[x][tNew].re = psi[x][tOld].re - laplace.im + 2.0*dt*potential(x)*psi[x][tNow].im;
+        psi[x][tNew].im = psi[x][tOld].im + laplace.re - 2.0*dt*potential(x)*psi[x][tNow].re;
       }
 
       const _tOld = tOld;
@@ -147,24 +173,24 @@
       tNow = tNew;
       tNew = _tOld;
     }
-    drawWave();
+    drawCanvas();
     animReqId = requestAnimFrame(evolve);
   }
 
-  for (let x=1; x<canvas.width; x++) {
-    psiWave[x] = initialWavePacketAtX(x);
+  for (let x=1; x<N_UNIVERSE; x++) {
+    psi[x] = initialWavePacketAtX(x);
   }
-  psiWave[0] = {
+  psi[0] = {
     0: new Complex(0,0),
     1: new Complex(0,0),
     2: new Complex(0,0)
   }
-  psiWave[canvas.width] = {
+  psi[N_UNIVERSE] = {
     0: new Complex(0,0),
     1: new Complex(0,0),
     2: new Complex(0,0)
   }
-  drawWave();
+  drawCanvas();
 
   window.requestAnimFrame = (function(){
     return window.requestAnimationFrame  ||
