@@ -14,6 +14,8 @@
   let movingLeftPotential = false;
   let movingCenterPotential = false;
   let movingRightPotential = false;
+  let movingLeftPartition = false;
+  let movingRightPartition = false;
 
   canvas.addEventListener('mousedown', onCanvasClick);
 
@@ -57,8 +59,8 @@
   let vCenter = 12000.0;
   let vRight = 0;
 
-  const xLeft = 0.47*N_UNIVERSE*dx;
-  const xRight = 0.52*N_UNIVERSE*dx;
+  let xLeft = 0.47*N_UNIVERSE*dx;
+  let xRight = 0.52*N_UNIVERSE*dx;
 
 
   // Display vars //
@@ -140,12 +142,28 @@
       evolving = false;
       movingRightPotential = true;
     }
+    if (event.offsetY >= Math.min(canvasLocationY(vLeft, potentialScale), canvasLocationY(vCenter, potentialScale))
+          && event.offsetY <= Math.max(canvasLocationY(vLeft, potentialScale), canvasLocationY(vCenter, potentialScale))
+          && event.offsetX >= xLeft/dx - 15
+          && event.offsetX <= xLeft/dx + 15) {
+      evolving = false;
+      movingLeftPartition = true;
+    }
+    if (event.offsetY >= Math.min(canvasLocationY(vCenter, potentialScale), canvasLocationY(vRight, potentialScale))
+          && event.offsetY <= Math.max(canvasLocationY(vCenter, potentialScale), canvasLocationY(vRight, potentialScale))
+          && event.offsetX >= xRight/dx - 15
+          && event.offsetX <= xRight/dx + 15) {
+      evolving = false;
+      movingRightPartition = true;
+    }
   }
 
   function draggingPotential(event) {
     if (movingLeftPotential) { vLeft = eventToPotentialValue(event); }
     if (movingCenterPotential) { vCenter = eventToPotentialValue(event); }
     if (movingRightPotential) { vRight = eventToPotentialValue(event); }
+    if (movingLeftPartition) { xLeft = event.offsetX*dx; }
+    if (movingRightPartition) { xRight = event.offsetX*dx; }
   }
 
   function stopDrag() {
@@ -153,6 +171,8 @@
     movingLeftPotential = false;
     movingCenterPotential = false;
     movingRightPotential = false;
+    movingLeftPartition = false;
+    movingRightPartition = false;
   }
 
   canvas.addEventListener('mousemove', draggingPotential);
