@@ -10,8 +10,12 @@
 <script>
   const canvas = document.querySelector('#draw');
   const ctx = canvas.getContext('2d');
+  let evolving = true;
+  let movingLeftPotential = false;
+  let movingCenterPotential = false;
+  let movingRightPotential = false;
 
-  // canvas.addEventListener('click', onCanvasClick, false);
+  canvas.addEventListener('mousedown', onCanvasClick);
 
   function SQR(x) { return x*x; }
 
@@ -49,9 +53,9 @@
 
 
   // Potential state vars //
-  const vLeft = 0;
-  const vCenter = 12000.0;
-  const vRight = 0;
+  let vLeft = 0;
+  let vCenter = 12000.0;
+  let vRight = 0;
 
   const xLeft = 0.47*N_UNIVERSE*dx;
   const xRight = 0.52*N_UNIVERSE*dx;
@@ -111,6 +115,49 @@
   function expectationValue(complexValue) {
     return SQR(complexValue.re) + SQR(complexValue.im);
   }
+
+  function eventToPotentialValue(e) {
+    return (canvas.height - e.offsetY)/potentialScale;
+  }
+
+  function onCanvasClick(event) {
+    if (event.offsetY >= canvasLocationY(vLeft, potentialScale) - 15
+          && event.offsetY <= canvasLocationY(vLeft, potentialScale) + 15
+          && event.offsetX <= xLeft/dx) {
+      evolving = false;
+      movingLeftPotential = true;
+    }
+    if (event.offsetY >= canvasLocationY(vCenter, potentialScale) - 15
+          && event.offsetY <= canvasLocationY(vCenter, potentialScale) + 15
+          && event.offsetX >= xLeft/dx
+          && event.offsetX <= xRight/dx) {
+      evolving = false;
+      movingCenterPotential = true;
+    }
+    if (event.offsetY >= canvasLocationY(vRight, potentialScale) - 15
+          && event.offsetY <= canvasLocationY(vRight, potentialScale) + 15
+          && event.offsetX >= xRight/dx) {
+      evolving = false;
+      movingRightPotential = true;
+    }
+  }
+
+  function draggingPotential(event) {
+    if (movingLeftPotential) { vLeft = eventToPotentialValue(event); }
+    if (movingCenterPotential) { vCenter = eventToPotentialValue(event); }
+    if (movingRightPotential) { vRight = eventToPotentialValue(event); }
+  }
+
+  function stopDrag() {
+    evolving = true;
+    movingLeftPotential = false;
+    movingCenterPotential = false;
+    movingRightPotential = false;
+  }
+
+  canvas.addEventListener('mousemove', draggingPotential);
+  canvas.addEventListener('mouseup', stopDrag);
+  canvas.addEventListener('mouseout', stopDrag);
 
   function potential(x) {
     if (x < xLeft/dx && x > 0) { return vLeft; }
@@ -173,8 +220,6 @@
       tNow = tNew;
       tNew = _tOld;
     }
-    drawCanvas();
-    animReqId = requestAnimFrame(evolve);
   }
 
   for (let x=1; x<N_UNIVERSE; x++) {
@@ -190,7 +235,12 @@
     1: new Complex(0,0),
     2: new Complex(0,0)
   }
-  drawCanvas();
+
+  function mainCycle() {
+    if (evolving) { evolve(); }
+    drawCanvas();
+    animReqId = requestAnimFrame(mainCycle);
+  }
 
   window.requestAnimFrame = (function(){
     return window.requestAnimationFrame  ||
@@ -201,7 +251,8 @@
       };
   })();
 
-  requestAnimFrame(evolve);
+  drawCanvas();
+  requestAnimFrame(mainCycle);
 </script>
 
 </body>
