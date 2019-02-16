@@ -41,7 +41,7 @@
   // Physical constants //
   const sigma = 25;
   const energy = 31100.0;
-  const x0 = 0.3 * canvas.width;//200.0;
+  const x0 = 0.3 * canvas.width;
 
   const dt_dx2 = 0.006;
   const dx = 0.004;
@@ -50,17 +50,17 @@
 
   // Potential state vars //
   const vLeft = 0;
-  const vCenter = 11000.0;
+  const vCenter = 12000.0;
   const vRight = 0;
 
-  const xLeft = 0.45*N_UNIVERSE*dx;
-  const xRight = 0.55*N_UNIVERSE*dx;
+  const xLeft = 0.47*N_UNIVERSE*dx;
+  const xRight = 0.52*N_UNIVERSE*dx;
 
 
   // Display vars //
   let animReqId = null;
   const xScale = 3.0;
-  const psi2Scale = 14500.0;//(canvas.height * 30.0);
+  const psi2Scale = canvas.height * 30.0;
   const nDtPerDisplay = 220;
 
   const potentialScale = 0.0105;
@@ -127,7 +127,7 @@
     const d = 2*p0*time - x + x0;
     const d_sigmaT = d/sigmaT;
 
-    // const phase = p0*(x - x0) - energy*time;
+    // const phase = p0*(x-x0) - energy*time;
     // const abs = Math.exp(-0.5*SQR(x-x0))/SQR(sigma);
     const phase = SQR(p0)*time - p0*(x - x0) - 0.5*t_tS*SQR(d_sigmaT) + 0.5*Math.atan(t_tS);
     const abs = Math.exp(-0.5*SQR(d_sigmaT))/Math.sqrt(Math.sqrt(Math.PI)*sigmaT);
