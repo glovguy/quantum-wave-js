@@ -36,12 +36,14 @@
   }
 
   // Wave state vars //
-  const N_UNIVERSE = 1265;//4000.0;
+  const N_UNIVERSE = 1265; //4000.0;
   const psi = [];
+  let _secondPsi = [];
 
   let tOld = 0;
   let tNow = 1;
   let tNew = 2;
+  let psiIntegral = null;
 
 
   // Physical constants //
@@ -65,7 +67,7 @@
 
   // Display vars //
   let animReqId = null;
-  const xScale = 3.0;
+  const xScale = N_UNIVERSE/canvas.width; //3.0;
   const psi2Scale = canvas.height * 30.0;
   const nDtPerDisplay = 220;
 
@@ -76,30 +78,46 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'lightgrey';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawWave();
+    drawWave(x => expectationValue(psi[x][tNow]), psi2Scale);
+    // drawWave(x => expectationValue(secondPsi(x)), 0.001*psi2Scale, "red");
+    // drawWave(x => expectationValue(momentumWavefunction(0.002*(x-400))), psi2Scale*0.0009);
     drawPotentialEnergy();
+    drawMomentumAxes();
   }
 
-  function drawWave() {
+  function drawMomentumAxes() {
+    ctx.beginPath();
+    ctx.moveTo(400, canvas.height);
+    ctx.lineTo(400, 0);
+    ctx.stroke();
+    ctx.strokeStyle = "yellow";
+    // const p0Loc = 176.35//0.002 + 400;
+    // console.log('p0Loc', p0Loc);
+    // ctx.beginPath();
+    // ctx.moveTo(p0Loc, canvas.height);
+    // ctx.lineTo(p0Loc, 0);
+    // ctx.stroke();
+  }
+
+  function drawWave(waveFn, scale, color="green") {
     ctx.beginPath();
     ctx.lineWidth = "2";
-    ctx.strokeStyle = "green";
-    ctx.moveTo(0,canvas.height);
-    for (let x=1; x<canvas.width; x++) {
-      const y = canvasLocationY(expectationValue(psi[x][tNow]), psi2Scale);
+    ctx.strokeStyle = color;
+    ctx.moveTo(0, canvasLocationY(waveFn(0), scale));
+    for (let x=1; x<=canvas.width; x++) {
+      const y = canvasLocationY(waveFn(x), scale);
       ctx.lineTo(x, y);
     }
-    ctx.lineTo(psi.length, canvas.height);
     ctx.stroke();
   }
 
-  function drawPotentialEnergy() {
+  function drawPotentialEnergy(color="blue") {
     ctx.beginPath();
     ctx.lineWidth = "1";
-    ctx.strokeStyle = "blue";
-    ctx.moveTo(0, canvasLocationY(energy,potentialScale));
-    ctx.lineTo(canvas.width, canvasLocationY(energy,potentialScale));
-    ctx.stroke();
+    ctx.strokeStyle = color;
+    // ctx.moveTo(0, canvasLocationY(energy,potentialScale));
+    // ctx.lineTo(canvas.width, canvasLocationY(energy,potentialScale));
+    // ctx.stroke();
 
     ctx.moveTo(0, canvasLocationY(vLeft, potentialScale));
     ctx.lineTo(xLeft/dx, canvasLocationY(vLeft, potentialScale));
@@ -112,10 +130,6 @@
 
   function canvasLocationY(value, scale) {
     return canvas.height - scale*value;
-  }
-
-  function expectationValue(complexValue) {
-    return SQR(complexValue.re) + SQR(complexValue.im);
   }
 
   function eventToPotentialValue(e) {
@@ -185,6 +199,49 @@
     if (x >= xRight/dx && x < canvas.width/dx) { return vRight; }
   }
 
+  function expectationValue(complexValue) {
+    return SQR(complexValue.re) + SQR(complexValue.im);
+  }
+
+  function momentumWavefunction(p) { // Doesn't work yet
+    let wve = psi.reduce((sum, psiAtX, x) => {
+      return new Complex(
+        sum.re + psiAtX[tNow].re * Math.cos(-x*p) + psiAtX[tNow].im * Math.sin(-x*p),
+        sum.im + psiAtX[tNow].im * Math.cos(-x*p) + psiAtX[tNow].re * Math.sin(-x*p)
+      );
+    }, new Complex(0,0));
+    return new Complex(
+      wve.re * 1.0/Math.sqrt(2*Math.PI),
+      wve.im * 1.0/Math.sqrt(2*Math.PI)
+      );
+  }
+
+  function momentumToPositionWaveFunction(phi, x) { // Doesn't work yet
+    let wve = phi.reduce((sum, phiAtX, p) => {
+      return new Complex(
+        sum.re + phiAtX.re * Math.cos(x*p) + phiAtX.im * Math.sin(x*p),
+        sum.im + phiAtX.im * Math.cos(x*p) + phiAtX.re * Math.sin(x*p)
+      );
+    }, new Complex(0,0));
+    return new Complex(
+      wve.re * 1.0/Math.sqrt(2*Math.PI),
+      wve.im * 1.0/Math.sqrt(2*Math.PI)
+      );
+  }
+
+  function confirmPositionRepresentation() {
+    phi = psi.map((p,x) => momentumWavefunction(x));
+    _secondPsi = phi.map((_, p) => momentumToPositionWaveFunction(phi, p));
+  }
+
+  function secondPsi(x) {
+    if (x in _secondPsi) { return _secondPsi[x]; }
+    console.log('could not find x in secondPsi');
+    return 0;
+  }
+
+  // e**(ix) == Math.cos(x) + i * Math.sin(x)
+
   function initialWavePacketAtTimeAndX(time, x) {
     const tS = 0.5*SQR(sigma);
     const t_tS = time/tS;
@@ -239,11 +296,14 @@
       tOld = tNow;
       tNow = tNew;
       tNew = _tOld;
+      psiIntegral = null;
     }
+    // confirmPositionRepresentation();
   }
 
   for (let x=1; x<N_UNIVERSE; x++) {
     psi[x] = initialWavePacketAtX(x);
+    _secondPsi[x] = Object.assign({}, psi[x]);
   }
   psi[0] = {
     0: new Complex(0,0),
@@ -251,6 +311,16 @@
     2: new Complex(0,0)
   }
   psi[N_UNIVERSE] = {
+    0: new Complex(0,0),
+    1: new Complex(0,0),
+    2: new Complex(0,0)
+  }
+  _secondPsi[0] = {
+    0: new Complex(0,0),
+    1: new Complex(0,0),
+    2: new Complex(0,0)
+  }
+  _secondPsi[N_UNIVERSE] = {
     0: new Complex(0,0),
     1: new Complex(0,0),
     2: new Complex(0,0)
@@ -271,6 +341,7 @@
       };
   })();
 
+  // confirmPositionRepresentation();
   drawCanvas();
   requestAnimFrame(mainCycle);
 </script>
