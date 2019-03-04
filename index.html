@@ -6,19 +6,7 @@
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
 <canvas id="draw" width="1265" height="492"></canvas>
-
 <script>
-  const canvas = document.querySelector('#draw');
-  const ctx = canvas.getContext('2d');
-  let evolving = true;
-  let movingLeftPotential = false;
-  let movingCenterPotential = false;
-  let movingRightPotential = false;
-  let movingLeftPartition = false;
-  let movingRightPartition = false;
-
-  canvas.addEventListener('mousedown', onCanvasClick);
-
   function SQR(x) { return x*x; }
 
   class Complex {
@@ -35,6 +23,59 @@
     }
   }
 
+  const canvas = document.querySelector('#draw');
+  const ctx = canvas.getContext('2d');
+
+
+  // Gaussian //
+
+  // Physical constants //
+  const sigma = 25;
+  const energy = 31100.0;
+  const x0 = 0.3 * canvas.width;
+
+  // e**(ix) == Math.cos(x) + i * Math.sin(x)
+
+  function initialWavePacketAtTimeAndX(time, x) {
+    const tS = 0.5*SQR(sigma);
+    const t_tS = time/tS;
+    const sigmaT = sigma*Math.sqrt(1 + SQR(t_tS));
+
+    const p0 = Math.sqrt(energy);
+    const d = 2*p0*time - x + x0;
+    const d_sigmaT = d/sigmaT;
+
+    // const phase = p0*(x-x0) - energy*time;
+    // const abs = Math.exp(-0.5*SQR(x-x0))/SQR(sigma);
+    const phase = SQR(p0)*time - p0*(x - x0) - 0.5*t_tS*SQR(d_sigmaT) + 0.5*Math.atan(t_tS);
+    const abs = Math.exp(-0.5*SQR(d_sigmaT))/Math.sqrt(Math.sqrt(Math.PI)*sigmaT);
+    const psiExact = new Complex(
+      abs*Math.cos(phase),
+      abs*Math.cos(phase + Math.PI/2.0)
+    );
+    return psiExact;
+  }
+
+  function initialWavePacketAtX(x) {
+    const psiOld = initialWavePacketAtTimeAndX(-dt, x);
+    const psiNow = initialWavePacketAtTimeAndX(0, x);
+    const psiNew = initialWavePacketAtTimeAndX(dt, x);
+
+    const wave = {};
+    wave[tNow] = psiNow;
+    wave[tNew] = psiNew;
+    wave[tOld] = psiOld;
+    return wave;
+  }
+
+
+  // Physical Model //
+
+  // Physical Constants //
+  const dt_dx2 = 0.006;
+  const dx = 0.004;
+  const dt = dt_dx2 * SQR(dx);
+
   // Wave state vars //
   const N_UNIVERSE = 1265; //4000.0;
   const psi = [];
@@ -45,17 +86,6 @@
   let tNew = 2;
   let psiIntegral = null;
 
-
-  // Physical constants //
-  const sigma = 25;
-  const energy = 31100.0;
-  const x0 = 0.3 * canvas.width;
-
-  const dt_dx2 = 0.006;
-  const dx = 0.004;
-  const dt = dt_dx2 * SQR(dx);
-
-
   // Potential state vars //
   let vLeft = 0;
   let vCenter = 12000.0;
@@ -64,6 +94,106 @@
   let xLeft = 0.47*N_UNIVERSE*dx;
   let xRight = 0.52*N_UNIVERSE*dx;
 
+
+  function expectationValue(complexValue) {
+    return SQR(complexValue.re) + SQR(complexValue.im);
+  }
+
+  function potential(x) {
+    if (x < xLeft/dx && x > 0) { return vLeft; }
+    if (x >= xLeft/dx && x < xRight/dx) { return vCenter; }
+    if (x >= xRight/dx && x < canvas.width/dx) { return vRight; }
+  }
+
+  function positionWaveFunction(x) {
+    return psi[x][tNow];
+  }
+
+  function momentumWavefunction(p) { // Doesn't work yet
+    let wve = psi.reduce((sum, psiAtX, x) => {
+      return new Complex(
+        sum.re + psiAtX[tNow].re * Math.cos(-x*p) + psiAtX[tNow].im * Math.sin(-x*p),
+        sum.im + psiAtX[tNow].im * Math.cos(-x*p) + psiAtX[tNow].re * Math.sin(-x*p)
+      );
+    }, new Complex(0,0));
+    return new Complex(
+      wve.re * 1.0/Math.sqrt(2*Math.PI),
+      wve.im * 1.0/Math.sqrt(2*Math.PI)
+      );
+  }
+
+  function momentumToPositionWaveFunction(phi, x) { // Doesn't work yet
+    let wve = phi.reduce((sum, phiAtX, p) => {
+      return new Complex(
+        sum.re + phiAtX.re * Math.cos(x*p) + phiAtX.im * Math.sin(x*p),
+        sum.im + phiAtX.im * Math.cos(x*p) + phiAtX.re * Math.sin(x*p)
+      );
+    }, new Complex(0,0));
+    return new Complex(
+      wve.re * 1.0/Math.sqrt(2*Math.PI),
+      wve.im * 1.0/Math.sqrt(2*Math.PI)
+      );
+  }
+
+  function confirmPositionRepresentation() {
+    phi = psi.map((p,x) => momentumWavefunction(x));
+    _secondPsi = phi.map((_, p) => momentumToPositionWaveFunction(phi, p));
+  }
+
+  function secondPsi(x) {
+    if (x in _secondPsi) { return _secondPsi[x]; }
+    console.log('could not find x in secondPsi');
+    return 0;
+  }
+
+  function evolve() {
+    for (let iter=0; iter<nDtPerDisplay; iter++) {
+      for (let x=1; x<N_UNIVERSE; x++) {
+        const laplace = new Complex(
+          2.0*dt_dx2 * (psi[x-1][tNow].re - 2.0*psi[x][tNow].re + psi[x+1][tNow].re),
+          2.0*dt_dx2 * (psi[x-1][tNow].im - 2.0*psi[x][tNow].im + psi[x+1][tNow].im)
+        );
+        psi[x][tNew].re = psi[x][tOld].re - laplace.im + 2.0*dt*potential(x)*psi[x][tNow].im;
+        psi[x][tNew].im = psi[x][tOld].im + laplace.re - 2.0*dt*potential(x)*psi[x][tNow].re;
+      }
+
+      const _tOld = tOld;
+      tOld = tNow;
+      tNow = tNew;
+      tNew = _tOld;
+      psiIntegral = null;
+    }
+    // confirmPositionRepresentation();
+  }
+
+  // console.log(initialWavePacketAtX);
+  for (let x=1; x<N_UNIVERSE; x++) {
+    psi[x] = initialWavePacketAtX(x);
+    _secondPsi[x] = Object.assign({}, psi[x]);
+  }
+  psi[0] = {
+    0: new Complex(0,0),
+    1: new Complex(0,0),
+    2: new Complex(0,0)
+  }
+  psi[N_UNIVERSE] = {
+    0: new Complex(0,0),
+    1: new Complex(0,0),
+    2: new Complex(0,0)
+  }
+  _secondPsi[0] = {
+    0: new Complex(0,0),
+    1: new Complex(0,0),
+    2: new Complex(0,0)
+  }
+  _secondPsi[N_UNIVERSE] = {
+    0: new Complex(0,0),
+    1: new Complex(0,0),
+    2: new Complex(0,0)
+  }
+
+
+  // Display Model //
 
   // Display vars //
   let animReqId = null;
@@ -136,6 +266,35 @@
     return (canvas.height - e.offsetY)/potentialScale;
   }
 
+  // Controller //
+
+  function mainCycle() {
+    if (evolving) { evolve(); }
+    drawCanvas();
+    animReqId = requestAnimFrame(mainCycle);
+  }
+
+  window.requestAnimFrame = (function(){
+    return window.requestAnimationFrame  ||
+      window.webkitRequestAnimationFrame  ||
+      window.mozRequestAnimationFrame     ||
+      function( callback ){
+        window.setTimeout(callback, 100);
+      };
+  })();
+
+  let evolving = true;
+  let movingLeftPotential = false;
+  let movingCenterPotential = false;
+  let movingRightPotential = false;
+  let movingLeftPartition = false;
+  let movingRightPartition = false;
+
+  canvas.addEventListener('mousedown', onCanvasClick);
+  canvas.addEventListener('mousemove', draggingPotential);
+  canvas.addEventListener('mouseup', stopDrag);
+  canvas.addEventListener('mouseout', stopDrag);
+
   function onCanvasClick(event) {
     if (event.offsetY >= canvasLocationY(vLeft, potentialScale) - 15
           && event.offsetY <= canvasLocationY(vLeft, potentialScale) + 15
@@ -189,157 +348,12 @@
     movingRightPartition = false;
   }
 
-  canvas.addEventListener('mousemove', draggingPotential);
-  canvas.addEventListener('mouseup', stopDrag);
-  canvas.addEventListener('mouseout', stopDrag);
-
-  function potential(x) {
-    if (x < xLeft/dx && x > 0) { return vLeft; }
-    if (x >= xLeft/dx && x < xRight/dx) { return vCenter; }
-    if (x >= xRight/dx && x < canvas.width/dx) { return vRight; }
-  }
-
-  function expectationValue(complexValue) {
-    return SQR(complexValue.re) + SQR(complexValue.im);
-  }
-
-  function momentumWavefunction(p) { // Doesn't work yet
-    let wve = psi.reduce((sum, psiAtX, x) => {
-      return new Complex(
-        sum.re + psiAtX[tNow].re * Math.cos(-x*p) + psiAtX[tNow].im * Math.sin(-x*p),
-        sum.im + psiAtX[tNow].im * Math.cos(-x*p) + psiAtX[tNow].re * Math.sin(-x*p)
-      );
-    }, new Complex(0,0));
-    return new Complex(
-      wve.re * 1.0/Math.sqrt(2*Math.PI),
-      wve.im * 1.0/Math.sqrt(2*Math.PI)
-      );
-  }
-
-  function momentumToPositionWaveFunction(phi, x) { // Doesn't work yet
-    let wve = phi.reduce((sum, phiAtX, p) => {
-      return new Complex(
-        sum.re + phiAtX.re * Math.cos(x*p) + phiAtX.im * Math.sin(x*p),
-        sum.im + phiAtX.im * Math.cos(x*p) + phiAtX.re * Math.sin(x*p)
-      );
-    }, new Complex(0,0));
-    return new Complex(
-      wve.re * 1.0/Math.sqrt(2*Math.PI),
-      wve.im * 1.0/Math.sqrt(2*Math.PI)
-      );
-  }
-
-  function confirmPositionRepresentation() {
-    phi = psi.map((p,x) => momentumWavefunction(x));
-    _secondPsi = phi.map((_, p) => momentumToPositionWaveFunction(phi, p));
-  }
-
-  function secondPsi(x) {
-    if (x in _secondPsi) { return _secondPsi[x]; }
-    console.log('could not find x in secondPsi');
-    return 0;
-  }
-
-  // e**(ix) == Math.cos(x) + i * Math.sin(x)
-
-  function initialWavePacketAtTimeAndX(time, x) {
-    const tS = 0.5*SQR(sigma);
-    const t_tS = time/tS;
-    const sigmaT = sigma*Math.sqrt(1 + SQR(t_tS));
-
-    const p0 = Math.sqrt(energy);
-    const d = 2*p0*time - x + x0;
-    const d_sigmaT = d/sigmaT;
-
-    // const phase = p0*(x-x0) - energy*time;
-    // const abs = Math.exp(-0.5*SQR(x-x0))/SQR(sigma);
-    const phase = SQR(p0)*time - p0*(x - x0) - 0.5*t_tS*SQR(d_sigmaT) + 0.5*Math.atan(t_tS);
-    const abs = Math.exp(-0.5*SQR(d_sigmaT))/Math.sqrt(Math.sqrt(Math.PI)*sigmaT);
-    const psiExact = new Complex(
-      abs*Math.cos(phase),
-      abs*Math.cos(phase + Math.PI/2.0)
-    );
-    return psiExact;
-  }
-
-  function initialWavePacketAtX(x) {
-    const psiOld = initialWavePacketAtTimeAndX(-dt, x);
-    const psiNow = initialWavePacketAtTimeAndX(0, x);
-    const psiNew = initialWavePacketAtTimeAndX(dt, x);
-
-    const wave = {};
-    wave[tNow] = psiNow;
-    wave[tNew] = psiNew;
-    wave[tOld] = psiOld;
-    return wave;
-  }
-
   function eventLocationOnCanvas(event) {
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     return new Vector(x,y);
   }
-
-  function evolve() {
-    for (let iter=0; iter<nDtPerDisplay; iter++) {
-      for (let x=1; x<N_UNIVERSE; x++) {
-        const laplace = new Complex(
-          2.0*dt_dx2 * (psi[x-1][tNow].re - 2.0*psi[x][tNow].re + psi[x+1][tNow].re),
-          2.0*dt_dx2 * (psi[x-1][tNow].im - 2.0*psi[x][tNow].im + psi[x+1][tNow].im)
-        );
-        psi[x][tNew].re = psi[x][tOld].re - laplace.im + 2.0*dt*potential(x)*psi[x][tNow].im;
-        psi[x][tNew].im = psi[x][tOld].im + laplace.re - 2.0*dt*potential(x)*psi[x][tNow].re;
-      }
-
-      const _tOld = tOld;
-      tOld = tNow;
-      tNow = tNew;
-      tNew = _tOld;
-      psiIntegral = null;
-    }
-    // confirmPositionRepresentation();
-  }
-
-  for (let x=1; x<N_UNIVERSE; x++) {
-    psi[x] = initialWavePacketAtX(x);
-    _secondPsi[x] = Object.assign({}, psi[x]);
-  }
-  psi[0] = {
-    0: new Complex(0,0),
-    1: new Complex(0,0),
-    2: new Complex(0,0)
-  }
-  psi[N_UNIVERSE] = {
-    0: new Complex(0,0),
-    1: new Complex(0,0),
-    2: new Complex(0,0)
-  }
-  _secondPsi[0] = {
-    0: new Complex(0,0),
-    1: new Complex(0,0),
-    2: new Complex(0,0)
-  }
-  _secondPsi[N_UNIVERSE] = {
-    0: new Complex(0,0),
-    1: new Complex(0,0),
-    2: new Complex(0,0)
-  }
-
-  function mainCycle() {
-    if (evolving) { evolve(); }
-    drawCanvas();
-    animReqId = requestAnimFrame(mainCycle);
-  }
-
-  window.requestAnimFrame = (function(){
-    return window.requestAnimationFrame  ||
-      window.webkitRequestAnimationFrame  ||
-      window.mozRequestAnimationFrame     ||
-      function( callback ){
-        window.setTimeout(callback, 100);
-      };
-  })();
 
   // confirmPositionRepresentation();
   drawCanvas();
